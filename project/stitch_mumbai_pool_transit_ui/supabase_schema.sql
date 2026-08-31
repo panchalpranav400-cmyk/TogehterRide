@@ -20,7 +20,9 @@ create table public.profiles (
 -- Enable RLS on profiles
 alter table public.profiles enable row level security;
 
--- Create Policies for profiles
+-- RLS Policies for profiles
+-- NOTE: No INSERT policy needed — profile creation is handled by the
+-- handle_new_user() trigger below (SECURITY DEFINER bypasses RLS).
 create policy "Allow public read access to profiles"
   on public.profiles for select
   using (true);

@@ -48,7 +48,7 @@ class MainNavigationFlow extends StatefulWidget {
 class _MainNavigationFlowState extends State<MainNavigationFlow> {
   // Application splash & step navigation:
   // showSplash: Premium launch splash screen
-  // 0: Email + OTP Login (Auth only)
+  // 0: Email + Password Login / Sign Up
   // 9: Role Selection (Passenger vs Driver)
   // 1: Passenger Home / Route Planning
   // 8: Ride Matching Animated Waiting State
@@ -59,7 +59,9 @@ class _MainNavigationFlowState extends State<MainNavigationFlow> {
   // 6: Active Trip Navigation (Driver)
   // 7: Driver Trip Summary & Earnings
   bool showSplash = true;
-  int currentStep = 0;
+  // Start at step 9 (role selection) if user already has an active session
+  int currentStep =
+      Supabase.instance.client.auth.currentSession != null ? 9 : 0;
   String currentRole = 'passenger';
 
   void handleRoleSelected(String role) {

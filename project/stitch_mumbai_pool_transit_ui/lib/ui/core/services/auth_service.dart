@@ -18,53 +18,80 @@ class AuthService {
   
   static String? get accessToken => _supabase.auth.currentSession?.accessToken;
 
-  /// Sends a 6-digit OTP code to the user's email address using Supabase Auth
-  static Future<Map<String, dynamic>> sendOtp(String email) async {
+  /// Creates a new account with email, password, and name using Supabase Auth.
+  /// Profile creation is handled automatically by the handle_new_user() DB trigger.
+  static Future<Map<String, dynamic>> signUp({
+    required String email,
+    required String password,
+    required String name,
+  }) async {
     try {
-      // emailRedirectTo: null disables magic-link mode and forces Supabase
-      // to send a 6-digit numeric OTP token to the user's email instead.
-      await _supabase.auth.signInWithOtp(
+      final response = await _supabase.auth.signUp(
         email: email.trim(),
-        shouldCreateUser: true,
-        emailRedirectTo: null,
-      );
-      return {
-        'success': true,
-        'message': 'A 6-digit code has been sent to $email',
-      };
-    } catch (e) {
-      debugPrint('Supabase sendOtp error: $e');
-      return {
-        'success': false,
-        'message': 'Failed to send OTP: $e',
-      };
-    }
-  }
-
-  /// Verifies the 6-digit OTP and establishes a Supabase session
-  static Future<Map<String, dynamic>> verifyOtp(String email, String otp) async {
-    try {
-      final response = await _supabase.auth.verifyOTP(
-        type: OtpType.email,
-        email: email.trim(),
-        token: otp.trim(),
+        password: password,
+        // Pass name in metadata — the handle_new_user() trigger reads this
+        data: {'name': name.trim()},
       );
 
       final user = response.user;
       if (user != null) {
-        // Upsert a basic profile in the profiles table to ensure database has an entry for the user
-        await _supabase.from('profiles').upsert({
-          'id': user.id,
-          'name': user.email?.split('@')[0] ?? 'User',
-          'role': 'passenger', // default
-          'phone': '',
-          'rating': '5.0',
-          'is_verified': false,
-        });
-
+        // Profile is created automatically by the handle_new_user() DB trigger.
+        // No client-side upsert needed — avoids RLS race condition.
         return {
           'success': true,
-          'message': 'Successfully authenticated!',
+          'message': 'Account created successfully!',
+          'user': {
+            'id': user.id,
+            'email': user.email,
+          },
+        };
+      } else {
+        // Happens when email confirmation is enabled in Supabase Dashboard
+        return {
+          'success': true,
+          'message': 'Please check your email to confirm your account.',
+          'needsConfirmation': true,
+        };
+      }
+    } on AuthException catch (e) {
+      debugPrint('Supabase signUp error: $e');
+      String message;
+      if (e.message.contains('already registered')) {
+        message = 'An account with this email already exists. Please log in.';
+      } else if (e.message.contains('password')) {
+        message = 'Password must be at least 6 characters.';
+      } else {
+        message = e.message;
+      }
+      return {
+        'success': false,
+        'message': message,
+      };
+    } catch (e) {
+      debugPrint('Supabase signUp error: $e');
+      return {
+        'success': false,
+        'message': 'Sign up failed. Please try again.',
+      };
+    }
+  }
+
+  /// Signs in with email and password using Supabase Auth.
+  static Future<Map<String, dynamic>> signIn({
+    required String email,
+    required String password,
+  }) async {
+    try {
+      final response = await _supabase.auth.signInWithPassword(
+        email: email.trim(),
+        password: password,
+      );
+
+      final user = response.user;
+      if (user != null) {
+        return {
+          'success': true,
+          'message': 'Welcome back!',
           'user': {
             'id': user.id,
             'email': user.email,
@@ -73,14 +100,28 @@ class AuthService {
       } else {
         return {
           'success': false,
-          'message': 'Verification failed: User not created',
+          'message': 'Login failed. Please try again.',
         };
       }
-    } catch (e) {
-      debugPrint('Supabase verifyOtp error: $e');
+    } on AuthException catch (e) {
+      debugPrint('Supabase signIn error: $e');
+      String message = 'Login failed';
+      if (e.message.contains('Invalid login credentials')) {
+        message = 'Invalid email or password. Please try again.';
+      } else if (e.message.contains('Email not confirmed')) {
+        message = 'Please confirm your email before logging in.';
+      } else {
+        message = e.message;
+      }
       return {
         'success': false,
-        'message': 'Verification error: $e',
+        'message': message,
+      };
+    } catch (e) {
+      debugPrint('Supabase signIn error: $e');
+      return {
+        'success': false,
+        'message': 'Login failed: $e',
       };
     }
   }
