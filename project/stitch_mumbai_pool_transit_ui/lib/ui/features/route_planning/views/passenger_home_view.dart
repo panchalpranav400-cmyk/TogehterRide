@@ -1,10 +1,14 @@
 import 'package:flutter/material.dart';
+import 'package:latlong2/latlong.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_typography.dart';
+import '../../../core/models/trip_route.dart';
+import '../../../core/services/geocoding_service.dart';
+import '../../../core/services/location_service.dart';
 import '../../../core/widgets/app_osm_map.dart';
 
 class PassengerHomeView extends StatefulWidget {
-  final VoidCallback onSearchPools;
+  final ValueChanged<TripRoute> onSearchPools;
 
   const PassengerHomeView({super.key, required this.onSearchPools});
 
@@ -17,15 +21,133 @@ class _PassengerHomeViewState extends State<PassengerHomeView> {
   final TextEditingController destController = TextEditingController();
   int selectedNavIndex = 0;
 
+  LatLng? _originCoord;
+  LatLng? _destCoord;
+  bool _locatingUser = false;
+  bool _searchingRoute = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // Best-effort: prefill the origin with the device's current location.
+    _useCurrentLocation(silent: true);
+  }
+
+  Future<void> _useCurrentLocation({bool silent = false}) async {
+    setState(() => _locatingUser = true);
+    final result = await LocationService.getCurrentLocation();
+    if (!mounted) return;
+
+    if (result.isSuccess) {
+      final coord = result.coordinate!;
+      final placeName = await GeocodingService.reverseGeocode(coord);
+      if (!mounted) return;
+      setState(() {
+        _originCoord = coord;
+        originController.text = placeName ?? 'Current Location';
+        _locatingUser = false;
+      });
+    } else {
+      setState(() => _locatingUser = false);
+      if (!silent) {
+        _showSnack(_messageForLocationFailure(result.failure));
+      }
+    }
+  }
+
+  String _messageForLocationFailure(LocationFailure? failure) {
+    switch (failure) {
+      case LocationFailure.serviceDisabled:
+        return 'Turn on device location to use your current position.';
+      case LocationFailure.permissionDenied:
+        return 'Location permission denied.';
+      case LocationFailure.permissionDeniedForever:
+        return 'Location permission is blocked — enable it from app settings.';
+      case LocationFailure.unavailable:
+      case null:
+        return 'Could not get your current location.';
+    }
+  }
+
+  Future<void> _geocodeOrigin(String text) async {
+    if (text.trim().isEmpty) {
+      setState(() => _originCoord = null);
+      return;
+    }
+    setState(() => _searchingRoute = true);
+    final place = await GeocodingService.forwardGeocode(text);
+    if (!mounted) return;
+    setState(() => _searchingRoute = false);
+    if (place == null) {
+      _showSnack('Could not find "$text".');
+      return;
+    }
+    setState(() => _originCoord = place.coordinate);
+  }
+
+  Future<void> _geocodeDestination(String text) async {
+    if (text.trim().isEmpty) {
+      setState(() => _destCoord = null);
+      return;
+    }
+    setState(() => _searchingRoute = true);
+    final place = await GeocodingService.forwardGeocode(text);
+    if (!mounted) return;
+    setState(() => _searchingRoute = false);
+    if (place == null) {
+      _showSnack('Could not find "$text".');
+      return;
+    }
+    setState(() => _destCoord = place.coordinate);
+  }
+
+  void _showSnack(String message) {
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  Future<void> _handleFindPooledRide() async {
+    // Resolve any text the user typed but never submitted before handing off.
+    if (_originCoord == null && originController.text.trim().isNotEmpty) {
+      await _geocodeOrigin(originController.text);
+    }
+    if (_destCoord == null && destController.text.trim().isNotEmpty) {
+      await _geocodeDestination(destController.text);
+    }
+    if (!mounted) return;
+
+    widget.onSearchPools(
+      TripRoute(
+        originLabel:
+            originController.text.isEmpty ? 'Your Location' : originController.text,
+        destinationLabel:
+            destController.text.isEmpty ? 'Destination' : destController.text,
+        originCoordinate: _originCoord,
+        destinationCoordinate: _destCoord,
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
       body: Stack(
         children: [
-          // OpenStreetMap Interactive View
-          const Positioned.fill(
-            child: AppOsmMap(),
+          // Mapbox Interactive View
+          Positioned.fill(
+            child: AppOsmMap(
+              originLabel: originController.text.isEmpty
+                  ? 'Your Location'
+                  : originController.text,
+              destinationLabel: destController.text.isEmpty
+                  ? 'Choose destination'
+                  : destController.text,
+              originCoordinate: _originCoord,
+              destinationCoordinate: _destCoord,
+              showRoutePolyline: _originCoord != null && _destCoord != null,
+            ),
           ),
 
           // Top Header Bar
@@ -129,10 +251,33 @@ class _PassengerHomeViewState extends State<PassengerHomeView> {
                                   ),
                                   child: TextField(
                                     controller: originController,
-                                    decoration: const InputDecoration(
+                                    textInputAction: TextInputAction.search,
+                                    onSubmitted: _geocodeOrigin,
+                                    onChanged: (text) {
+                                      if (text.trim().isEmpty) {
+                                        setState(() => _originCoord = null);
+                                      }
+                                    },
+                                    decoration: InputDecoration(
                                       hintText: 'Current Location',
                                       border: InputBorder.none,
-                                      contentPadding: EdgeInsets.symmetric(horizontal: 14),
+                                      contentPadding:
+                                          const EdgeInsets.symmetric(horizontal: 14),
+                                      suffixIcon: _locatingUser
+                                          ? const Padding(
+                                              padding: EdgeInsets.all(14),
+                                              child: SizedBox(
+                                                width: 16,
+                                                height: 16,
+                                                child: CircularProgressIndicator(strokeWidth: 2),
+                                              ),
+                                            )
+                                          : IconButton(
+                                              icon: const Icon(Icons.my_location,
+                                                  size: 20, color: AppColors.secondary),
+                                              tooltip: 'Use current location',
+                                              onPressed: () => _useCurrentLocation(),
+                                            ),
                                     ),
                                   ),
                                 ),
@@ -163,6 +308,13 @@ class _PassengerHomeViewState extends State<PassengerHomeView> {
                                   ),
                                   child: TextField(
                                     controller: destController,
+                                    textInputAction: TextInputAction.done,
+                                    onSubmitted: _geocodeDestination,
+                                    onChanged: (text) {
+                                      if (text.trim().isEmpty) {
+                                        setState(() => _destCoord = null);
+                                      }
+                                    },
                                     decoration: const InputDecoration(
                                       hintText: 'Where to?',
                                       border: InputBorder.none,
@@ -177,6 +329,11 @@ class _PassengerHomeViewState extends State<PassengerHomeView> {
                       ),
                     ],
                   ),
+
+                  if (_searchingRoute) ...[
+                    const SizedBox(height: 12),
+                    const LinearProgressIndicator(minHeight: 2),
+                  ],
 
                   const SizedBox(height: 20),
 
@@ -193,7 +350,7 @@ class _PassengerHomeViewState extends State<PassengerHomeView> {
                           borderRadius: BorderRadius.circular(12),
                         ),
                       ),
-                      onPressed: widget.onSearchPools,
+                      onPressed: _handleFindPooledRide,
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [

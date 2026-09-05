@@ -1,3 +1,5 @@
+import 'package:flutter_dotenv/flutter_dotenv.dart';
+
 /// TogetherRide Application Configuration & API Credentials
 class AppConfig {
   /// Supabase project URL (Dashboard → Project Settings → API).
@@ -19,6 +21,11 @@ class AppConfig {
   /// Replace 'YOUR_GOOGLE_MAPS_API_KEY' with your actual key from Google Cloud Console.
   /// Ensure Maps SDK for Android, Maps SDK for iOS, and Maps JavaScript API are enabled.
   static const String googleMapsApiKey = 'YOUR_GOOGLE_MAPS_API_KEY';
+
+  /// Mapbox access token, loaded from the .env file at runtime (never hard-coded/committed).
+  /// Get one from https://account.mapbox.com/access-tokens/.
+  static String get mapboxAccessToken =>
+      dotenv.env['MAPBOX_ACCESS_TOKEN'] ?? '';
 
   /// Default Mumbai Map Center (Bandra - Lower Parel Transit Corridor)
   static const double defaultLat = 19.0300;

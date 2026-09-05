@@ -1,12 +1,18 @@
 import 'package:flutter/material.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_typography.dart';
-import '../../../core/widgets/app_google_map.dart';
+import '../../../core/models/trip_route.dart';
+import '../../../core/widgets/app_osm_map.dart';
 
 class LiveTripPassengerView extends StatelessWidget {
   final VoidCallback onTripFinished;
+  final TripRoute? tripRoute;
 
-  const LiveTripPassengerView({super.key, required this.onTripFinished});
+  const LiveTripPassengerView({
+    super.key,
+    required this.onTripFinished,
+    this.tripRoute,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -33,13 +39,16 @@ class LiveTripPassengerView extends StatelessWidget {
       ),
       body: Stack(
         children: [
-          // Google Maps Live Tracking View
+          // Mapbox Live Tracking View
           SizedBox(
             height: MediaQuery.of(context).size.height * 0.58,
-            child: const AppGoogleMap(
+            child: AppOsmMap(
               mapThemeMode: MapThemeMode.light,
-              originLabel: 'Bandra Station',
-              destinationLabel: 'Lower Parel One International Center',
+              originLabel: tripRoute?.originLabel ?? 'Bandra Station',
+              destinationLabel: tripRoute?.destinationLabel ??
+                  'Lower Parel One International Center',
+              originCoordinate: tripRoute?.originCoordinate,
+              destinationCoordinate: tripRoute?.destinationCoordinate,
               showRoutePolyline: true,
               showDriverLocation: true,
               isInteractive: true,

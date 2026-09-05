@@ -1,16 +1,19 @@
 import 'package:flutter/material.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_typography.dart';
-import '../../../core/widgets/app_google_map.dart';
+import '../../../core/models/trip_route.dart';
+import '../../../core/widgets/app_osm_map.dart';
 
 class MatchFoundView extends StatelessWidget {
   final VoidCallback onConfirmBooking;
   final VoidCallback onBack;
+  final TripRoute? tripRoute;
 
   const MatchFoundView({
     super.key,
     required this.onConfirmBooking,
     required this.onBack,
+    this.tripRoute,
   });
 
   @override
@@ -19,14 +22,16 @@ class MatchFoundView extends StatelessWidget {
       backgroundColor: AppColors.surface,
       body: Stack(
         children: [
-          // Google Maps Match Route Preview Canvas
+          // Mapbox Match Route Preview Canvas
           SizedBox(
             height: MediaQuery.of(context).size.height * 0.55,
             width: double.infinity,
-            child: const AppGoogleMap(
+            child: AppOsmMap(
               mapThemeMode: MapThemeMode.light,
-              originLabel: 'Bandra Station West',
-              destinationLabel: 'Lower Parel Hub',
+              originLabel: tripRoute?.originLabel ?? 'Bandra Station West',
+              destinationLabel: tripRoute?.destinationLabel ?? 'Lower Parel Hub',
+              originCoordinate: tripRoute?.originCoordinate,
+              destinationCoordinate: tripRoute?.destinationCoordinate,
               showRoutePolyline: true,
               showDriverLocation: true,
               isInteractive: true,
@@ -269,24 +274,4 @@ class MatchFoundView extends StatelessWidget {
       ),
     );
   }
-}
-
-class _MapPathPainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = AppColors.primary
-      ..strokeWidth = 6
-      ..style = PaintingStyle.stroke
-      ..strokeCap = StrokeCap.round;
-
-    final path = Path()
-      ..moveTo(size.width * 0.1, size.height * 0.7)
-      ..cubicTo(size.width * 0.3, size.height * 0.5, size.width * 0.6, size.height * 0.4, size.width * 0.9, size.height * 0.2);
-
-    canvas.drawPath(path, paint);
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }

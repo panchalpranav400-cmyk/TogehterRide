@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:latlong2/latlong.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_typography.dart';
-import '../../../core/widgets/app_google_map.dart';
+import '../../../core/services/location_service.dart';
+import '../../../core/widgets/app_osm_map.dart';
 
-class RideRequestDriverView extends StatelessWidget {
+class RideRequestDriverView extends StatefulWidget {
   final VoidCallback onAcceptRequest;
   final VoidCallback onDeclineRequest;
 
@@ -12,6 +14,25 @@ class RideRequestDriverView extends StatelessWidget {
     required this.onAcceptRequest,
     required this.onDeclineRequest,
   });
+
+  @override
+  State<RideRequestDriverView> createState() => _RideRequestDriverViewState();
+}
+
+class _RideRequestDriverViewState extends State<RideRequestDriverView> {
+  LatLng? _driverLocation;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadDriverLocation();
+  }
+
+  Future<void> _loadDriverLocation() async {
+    final result = await LocationService.getCurrentLocation();
+    if (!mounted || !result.isSuccess) return;
+    setState(() => _driverLocation = result.coordinate);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -32,12 +53,13 @@ class RideRequestDriverView extends StatelessWidget {
       ),
       body: Stack(
         children: [
-          // Google Maps Driver Request Background Canvas
-          const Positioned.fill(
-            child: AppGoogleMap(
+          // Mapbox Driver Request Background Canvas
+          Positioned.fill(
+            child: AppOsmMap(
               mapThemeMode: MapThemeMode.light,
               originLabel: 'Pickup: Bandra West',
               destinationLabel: 'Dropoff: Lower Parel',
+              driverCoordinate: _driverLocation,
               showRoutePolyline: true,
               showDriverLocation: true,
               isInteractive: true,
@@ -274,7 +296,7 @@ class RideRequestDriverView extends StatelessWidget {
                                     side: const BorderSide(color: AppColors.primary, width: 1.5),
                                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                                   ),
-                                  onPressed: onDeclineRequest,
+                                  onPressed: widget.onDeclineRequest,
                                   child: Text('Decline', style: AppTypography.headlineSmall.copyWith(fontSize: 16, color: AppColors.primary)),
                                 ),
                               ),
@@ -290,7 +312,7 @@ class RideRequestDriverView extends StatelessWidget {
                                     foregroundColor: Colors.white,
                                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                                   ),
-                                  onPressed: onAcceptRequest,
+                                  onPressed: widget.onAcceptRequest,
                                   child: Text('Accept Pool Request', style: AppTypography.headlineSmall.copyWith(fontSize: 16, color: Colors.white)),
                                 ),
                               ),

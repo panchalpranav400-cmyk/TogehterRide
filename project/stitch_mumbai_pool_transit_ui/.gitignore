@@ -49,3 +49,6 @@ app.*.map.json
 
 # Flutter plugins file
 .flutter-plugins
+
+# Environment variables / API keys (never commit real secrets)
+.env

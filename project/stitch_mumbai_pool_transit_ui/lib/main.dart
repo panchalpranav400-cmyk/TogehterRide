@@ -1,9 +1,11 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'supabase_client.dart';
 import 'ui/core/constants/app_config.dart';
+import 'ui/core/models/trip_route.dart';
 import 'ui/core/theme/app_theme.dart';
 import 'ui/features/splash/views/together_ride_splash.dart';
 import 'ui/features/auth/views/login_role_selection_view.dart';
@@ -19,6 +21,8 @@ import 'ui/features/driver_summary/views/trip_summary_driver_view.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  await dotenv.load(fileName: '.env');
 
   await Supabase.initialize(
     url: AppConfig.supabaseUrl,
@@ -74,6 +78,7 @@ class _MainNavigationFlowState extends State<MainNavigationFlow>
   // Start at step 9 (role selection) if user already has an active session
   int currentStep = supabase.auth.currentSession != null ? 9 : 0;
   String currentRole = 'passenger';
+  TripRoute? _searchedRoute;
   StreamSubscription<AuthState>? _authSubscription;
 
   @override
@@ -180,7 +185,10 @@ class _MainNavigationFlowState extends State<MainNavigationFlow>
 
       case 1:
         return PassengerHomeView(
-          onSearchPools: () => setState(() => currentStep = 8),
+          onSearchPools: (route) => setState(() {
+            _searchedRoute = route;
+            currentStep = 8;
+          }),
         );
 
       case 8:
@@ -191,12 +199,14 @@ class _MainNavigationFlowState extends State<MainNavigationFlow>
 
       case 2:
         return MatchFoundView(
+          tripRoute: _searchedRoute,
           onConfirmBooking: () => setState(() => currentStep = 3),
           onBack: () => setState(() => currentStep = 1),
         );
 
       case 3:
         return LiveTripPassengerView(
+          tripRoute: _searchedRoute,
           onTripFinished: () => setState(() => currentStep = 4),
         );
 

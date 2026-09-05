@@ -17,6 +17,8 @@ dependencies:
   latlong2: ^0.10.1
   google_sign_in: ^7.2.0
   google_maps_flutter: ^2.18.0
+  flutter_dotenv: ^5.2.1
+  geolocator: ^14.0.3
 
 dev_dependencies:
   flutter_test:
@@ -28,3 +30,4 @@ flutter:
   assets:
     - sahay/DESIGN.md
     - assets/images/
+    - .env

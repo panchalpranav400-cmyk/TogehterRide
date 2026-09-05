@@ -1,12 +1,33 @@
 import 'package:flutter/material.dart';
+import 'package:latlong2/latlong.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_typography.dart';
-import '../../../core/widgets/app_google_map.dart';
+import '../../../core/services/location_service.dart';
+import '../../../core/widgets/app_osm_map.dart';
 
-class ActiveTripDriverView extends StatelessWidget {
+class ActiveTripDriverView extends StatefulWidget {
   final VoidCallback onCompleteTrip;
 
   const ActiveTripDriverView({super.key, required this.onCompleteTrip});
+
+  @override
+  State<ActiveTripDriverView> createState() => _ActiveTripDriverViewState();
+}
+
+class _ActiveTripDriverViewState extends State<ActiveTripDriverView> {
+  LatLng? _driverLocation;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadDriverLocation();
+  }
+
+  Future<void> _loadDriverLocation() async {
+    final result = await LocationService.getCurrentLocation();
+    if (!mounted || !result.isSuccess) return;
+    setState(() => _driverLocation = result.coordinate);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -14,12 +35,13 @@ class ActiveTripDriverView extends StatelessWidget {
       backgroundColor: const Color(0xFF191C1D), // Dark mode background
       body: Stack(
         children: [
-          // Google Maps Dark Navigation View
-          const Positioned.fill(
-            child: AppGoogleMap(
+          // Mapbox Dark Navigation View
+          Positioned.fill(
+            child: AppOsmMap(
               mapThemeMode: MapThemeMode.navigation,
               originLabel: 'WEH Bandra Flyover',
               destinationLabel: 'Lower Parel Hub',
+              driverCoordinate: _driverLocation,
               showRoutePolyline: true,
               showDriverLocation: true,
               isInteractive: true,
@@ -207,7 +229,7 @@ class ActiveTripDriverView extends StatelessWidget {
                               foregroundColor: Colors.white,
                               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                             ),
-                            onPressed: onCompleteTrip,
+                            onPressed: widget.onCompleteTrip,
                             child: Text('Complete Stop', style: AppTypography.headlineSmall.copyWith(fontSize: 16, color: Colors.white)),
                           ),
                         ),
