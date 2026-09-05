@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_typography.dart';
 import '../../../core/services/auth_service.dart';
+import '../../../core/widgets/google_sign_in_button.dart';
 
 class LoginRoleSelectionView extends StatefulWidget {
   final VoidCallback onAuthenticated;
@@ -24,6 +25,7 @@ class _LoginRoleSelectionViewState extends State<LoginRoleSelectionView>
       TextEditingController();
 
   bool _isLoading = false;
+  bool _isGoogleLoading = false;
   bool _isLoginMode = true; // true = Login, false = Sign Up
   bool _obscurePassword = true;
   bool _obscureConfirmPassword = true;
@@ -229,6 +231,34 @@ class _LoginRoleSelectionViewState extends State<LoginRoleSelectionView>
       }
     } else {
       _showSnackBar(result['message'] ?? 'Sign up failed', isError: true);
+    }
+  }
+
+  // ── Handle Google Sign-In ──
+  Future<void> _handleGoogleSignIn() async {
+    setState(() => _isGoogleLoading = true);
+
+    final result = await AuthService.signInWithGoogle();
+
+    if (!mounted) return;
+    setState(() => _isGoogleLoading = false);
+
+    if (result['success'] == true) {
+      if (result['authenticated'] == true) {
+        widget.onAuthenticated();
+        return;
+      }
+
+      _showSnackBar(
+        result['message'] ?? 'Complete sign-in in your browser.',
+        isError: false,
+      );
+      // Browser OAuth navigation is handled by onAuthStateChange in main.dart.
+    } else {
+      _showSnackBar(
+        result['message'] ?? 'Google sign-in failed',
+        isError: true,
+      );
     }
   }
 
@@ -893,6 +923,42 @@ class _LoginRoleSelectionViewState extends State<LoginRoleSelectionView>
 
                 // ── Submit Button ──
                 _buildSubmitButton(),
+
+                const SizedBox(height: 16),
+
+                // ── Divider ──
+                Row(
+                  children: [
+                    Expanded(
+                      child: Divider(
+                        color: AppColors.outlineVariant.withValues(alpha: 0.5),
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      child: Text(
+                        'OR',
+                        style: AppTypography.labelMonoSmall.copyWith(
+                          color: AppColors.onSurfaceVariant,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                    Expanded(
+                      child: Divider(
+                        color: AppColors.outlineVariant.withValues(alpha: 0.5),
+                      ),
+                    ),
+                  ],
+                ),
+
+                const SizedBox(height: 16),
+
+                // ── Google Sign-In ──
+                GoogleSignInButton(
+                  onPressed: _handleGoogleSignIn,
+                  isLoading: _isGoogleLoading,
+                ),
 
                 const SizedBox(height: 14),
 

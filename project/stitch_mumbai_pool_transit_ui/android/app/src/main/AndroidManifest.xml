@@ -5,6 +5,26 @@
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
 
+    <!-- Required on Android 11+ so url_launcher can open the OAuth browser -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.VIEW"/>
+            <data android:scheme="https"/>
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW"/>
+            <data android:scheme="http"/>
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW"/>
+            <data android:scheme="com.sahay.mumbai_pool_transit"/>
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW"/>
+            <data android:scheme="myflutterapp"/>
+        </intent>
+    </queries>
+
     <application
         android:label="TogetherRide"
         android:name="${applicationName}"
@@ -24,6 +44,24 @@
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
+            </intent-filter>
+            <!-- Deep link for Supabase OAuth callback (must match kOAuthRedirectUrl) -->
+            <intent-filter android:autoVerify="false">
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data
+                    android:scheme="com.sahay.mumbai_pool_transit"
+                    android:host="login-callback"/>
+            </intent-filter>
+            <!-- Legacy deep link (keep if already registered in Supabase) -->
+            <intent-filter android:autoVerify="false">
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data
+                    android:scheme="myflutterapp"
+                    android:host="login-callback"/>
             </intent-filter>
         </activity>
         <!-- Google Maps Android API Key -->

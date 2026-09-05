@@ -1,5 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'supabase_client.dart';
+import 'ui/core/constants/app_config.dart';
 import 'ui/core/theme/app_theme.dart';
 import 'ui/features/splash/views/together_ride_splash.dart';
 import 'ui/features/auth/views/login_role_selection_view.dart';
@@ -17,12 +21,19 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   await Supabase.initialize(
-    url: 'https://zmuxmtumlbnkpfnkzlfc.supabase.co',
-    publishableKey: 'sb_publishable_bsflwfhIxAxJVa12hqjpBQ_1MpcuKEL',
+    url: AppConfig.supabaseUrl,
+    publishableKey: AppConfig.supabaseAnonKey,
+    authOptions: const FlutterAuthClientOptions(
+      detectSessionInUri: true,
+      detectSessionInUriPredicate: isOAuthCallbackUri,
+    ),
   );
 
   runApp(const TogetherRideApp());
 }
+
+/// Global Supabase client — use after [Supabase.initialize] in [main].
+final SupabaseClient supabase = Supabase.instance.client;
 
 class TogetherRideApp extends StatelessWidget {
   const TogetherRideApp({super.key});
@@ -45,7 +56,8 @@ class MainNavigationFlow extends StatefulWidget {
   State<MainNavigationFlow> createState() => _MainNavigationFlowState();
 }
 
-class _MainNavigationFlowState extends State<MainNavigationFlow> {
+class _MainNavigationFlowState extends State<MainNavigationFlow>
+    with WidgetsBindingObserver {
   // Application splash & step navigation:
   // showSplash: Premium launch splash screen
   // 0: Email + Password Login / Sign Up
@@ -60,9 +72,65 @@ class _MainNavigationFlowState extends State<MainNavigationFlow> {
   // 7: Driver Trip Summary & Earnings
   bool showSplash = true;
   // Start at step 9 (role selection) if user already has an active session
-  int currentStep =
-      Supabase.instance.client.auth.currentSession != null ? 9 : 0;
+  int currentStep = supabase.auth.currentSession != null ? 9 : 0;
   String currentRole = 'passenger';
+  StreamSubscription<AuthState>? _authSubscription;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+
+    _authSubscription = supabase.auth.onAuthStateChange.listen((data) {
+      debugPrint('Auth event: ${data.event}, session: ${data.session != null}');
+      if (data.session == null) {
+        if (data.event == AuthChangeEvent.signedOut && mounted) {
+          setState(() {
+            currentStep = 0;
+          });
+        }
+        return;
+      }
+
+      if (data.event == AuthChangeEvent.signedIn ||
+          data.event == AuthChangeEvent.initialSession) {
+        _navigateAfterAuthentication();
+      }
+    });
+
+    // Cold start: app opened directly from OAuth deep link.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _navigateAfterAuthentication();
+    });
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _authSubscription?.cancel();
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Warm resume: user returns from OAuth browser back to the app.
+    if (state == AppLifecycleState.resumed) {
+      _navigateAfterAuthentication();
+    }
+  }
+
+  void _navigateAfterAuthentication() {
+    if (!mounted) return;
+    if (supabase.auth.currentSession == null) return;
+    if (currentStep != 0 && !showSplash) return;
+
+    setState(() {
+      showSplash = false;
+      if (currentStep == 0) {
+        currentStep = 9;
+      }
+    });
+  }
 
   void handleRoleSelected(String role) {
     setState(() {
@@ -74,9 +142,9 @@ class _MainNavigationFlowState extends State<MainNavigationFlow> {
       }
     });
 
-    final user = Supabase.instance.client.auth.currentUser;
+    final user = supabase.auth.currentUser;
     if (user != null) {
-      Supabase.instance.client
+      supabase
           .from('profiles')
           .update({'role': role})
           .eq('id', user.id)
@@ -91,7 +159,7 @@ class _MainNavigationFlowState extends State<MainNavigationFlow> {
 
   @override
   Widget build(BuildContext context) {
-    if (showSplash) {
+    if (showSplash && supabase.auth.currentSession == null) {
       return TogetherRideSplashScreen(
         onSplashComplete: () {
           setState(() {
@@ -112,13 +180,13 @@ class _MainNavigationFlowState extends State<MainNavigationFlow> {
 
       case 1:
         return PassengerHomeView(
-          onSearchPools: () => setState(() => currentStep = 8), // Show Ride Matching Waiting Animation
+          onSearchPools: () => setState(() => currentStep = 8),
         );
 
       case 8:
         return RideMatchingWaitingView(
-          onMatchFound: () => setState(() => currentStep = 2), // Match completed
-          onCancel: () => setState(() => currentStep = 1), // Return to Passenger Home
+          onMatchFound: () => setState(() => currentStep = 2),
+          onCancel: () => setState(() => currentStep = 1),
         );
 
       case 2:

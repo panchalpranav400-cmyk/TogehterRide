@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_typography.dart';
-import '../../../core/widgets/app_google_map.dart';
+import '../../../core/widgets/app_osm_map.dart';
 
 class PassengerHomeView extends StatefulWidget {
   final VoidCallback onSearchPools;
@@ -23,16 +23,9 @@ class _PassengerHomeViewState extends State<PassengerHomeView> {
       backgroundColor: AppColors.background,
       body: Stack(
         children: [
-          // Google Maps Interactive View
-          Positioned.fill(
-            child: AppGoogleMap(
-              mapThemeMode: MapThemeMode.light,
-              originLabel: originController.text.isEmpty ? 'Bandra West' : originController.text,
-              destinationLabel: destController.text.isEmpty ? 'Lower Parel' : destController.text,
-              showRoutePolyline: true,
-              showDriverLocation: false,
-              isInteractive: true,
-            ),
+          // OpenStreetMap Interactive View
+          const Positioned.fill(
+            child: AppOsmMap(),
           ),
 
           // Top Header Bar
@@ -281,22 +274,3 @@ class _PassengerHomeViewState extends State<PassengerHomeView> {
   }
 }
 
-class _MapGridPainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = AppColors.outlineVariant.withValues(alpha: 0.2)
-      ..strokeWidth = 1;
-
-    const double step = 30.0;
-    for (double x = 0; x < size.width; x += step) {
-      canvas.drawLine(Offset(x, 0), Offset(x, size.height), paint);
-    }
-    for (double y = 0; y < size.height; y += step) {
-      canvas.drawLine(Offset(0, y), Offset(size.width, y), paint);
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
-}

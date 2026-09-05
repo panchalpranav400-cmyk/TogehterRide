@@ -1,5 +1,20 @@
 /// TogetherRide Application Configuration & API Credentials
 class AppConfig {
+  /// Supabase project URL (Dashboard → Project Settings → API).
+  static const String supabaseUrl = 'https://zmuxmtumlbnkpfnkzlfc.supabase.co';
+
+  /// Supabase publishable (anon) key — safe for client-side use.
+  static const String supabaseAnonKey =
+      'sb_publishable_bsflwfhIxAxJVa12hqjpBQ_1MpcuKEL';
+
+  /// Google OAuth Web Client ID (Google Cloud → Credentials → Web client).
+  /// Also add this in Supabase Dashboard → Authentication → Providers → Google.
+  static const String googleWebClientId =
+      '956521732197-u98gt12cjtf5gdq3esso6kjtibitqalp.apps.googleusercontent.com';
+
+  /// Google OAuth iOS Client ID — only required when building for iOS.
+  static const String googleIosClientId = 'YOUR_GOOGLE_IOS_CLIENT_ID';
+
   /// Google Maps API Key
   /// Replace 'YOUR_GOOGLE_MAPS_API_KEY' with your actual key from Google Cloud Console.
   /// Ensure Maps SDK for Android, Maps SDK for iOS, and Maps JavaScript API are enabled.

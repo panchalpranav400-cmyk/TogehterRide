@@ -1,22 +1,35 @@
 import 'package:flutter/foundation.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../../supabase_client.dart';
+import '../constants/app_config.dart';
 
 class AuthService {
-  static final _supabase = Supabase.instance.client;
+  static SupabaseClient get _supabase => Supabase.instance.client;
+
+  static bool _googleSignInInitialized = false;
 
   static bool get isLoggedIn => _supabase.auth.currentSession != null;
-  
+
   static Map<String, dynamic>? get currentUser {
     final user = _supabase.auth.currentUser;
     if (user == null) return null;
     return {
       'id': user.id,
       'email': user.email,
-      'name': user.userMetadata?['name'] ?? user.email?.split('@')[0] ?? '',
+      'name': user.userMetadata?['name'] ??
+          user.userMetadata?['full_name'] ??
+          user.email?.split('@')[0] ??
+          '',
     };
   }
-  
+
   static String? get accessToken => _supabase.auth.currentSession?.accessToken;
+
+  static bool get _useNativeGoogleSignIn =>
+      !kIsWeb &&
+      (defaultTargetPlatform == TargetPlatform.android ||
+          defaultTargetPlatform == TargetPlatform.iOS);
 
   /// Creates a new account with email, password, and name using Supabase Auth.
   /// Profile creation is handled automatically by the handle_new_user() DB trigger.
@@ -29,14 +42,11 @@ class AuthService {
       final response = await _supabase.auth.signUp(
         email: email.trim(),
         password: password,
-        // Pass name in metadata — the handle_new_user() trigger reads this
         data: {'name': name.trim()},
       );
 
       final user = response.user;
       if (user != null) {
-        // Profile is created automatically by the handle_new_user() DB trigger.
-        // No client-side upsert needed — avoids RLS race condition.
         return {
           'success': true,
           'message': 'Account created successfully!',
@@ -46,7 +56,6 @@ class AuthService {
           },
         };
       } else {
-        // Happens when email confirmation is enabled in Supabase Dashboard
         return {
           'success': true,
           'message': 'Please check your email to confirm your account.',
@@ -126,9 +135,192 @@ class AuthService {
     }
   }
 
+  /// Signs in with Google.
+  ///
+  /// On Android/iOS this uses the native [google_sign_in] SDK plus
+  /// [GoTrueClient.signInWithIdToken] (recommended by Supabase).
+  /// On Web or if native is unavailable/fails, it uses browser OAuth + redirect.
+  static Future<Map<String, dynamic>> signInWithGoogle() async {
+    if (AppConfig.supabaseUrl.contains('YOUR_') ||
+        AppConfig.supabaseAnonKey.contains('YOUR_')) {
+      return {
+        'success': false,
+        'message':
+            'Supabase is not configured. Set AppConfig.supabaseUrl and supabaseAnonKey.',
+      };
+    }
+
+    if (_useNativeGoogleSignIn && !_isGoogleNativeConfigured) {
+      return _signInWithGoogleOAuth();
+    }
+
+    if (_useNativeGoogleSignIn) {
+      final nativeResult = await _signInWithGoogleNative();
+      // If native sign-in succeeded or was deliberately cancelled by user, return it
+      if (nativeResult['success'] == true ||
+          nativeResult['message'] == 'Google sign-in was cancelled.') {
+        return nativeResult;
+      }
+      // If native sign-in failed (e.g. SHA-1 or client ID not set up on device),
+      // seamlessly fall back to browser OAuth flow so user can still log in
+      debugPrint(
+        'Native Google sign-in failed (${nativeResult['message']}). Falling back to OAuth browser flow...',
+      );
+      return _signInWithGoogleOAuth();
+    }
+
+    return _signInWithGoogleOAuth();
+  }
+
+  static bool get _isGoogleNativeConfigured =>
+      !AppConfig.googleWebClientId.contains('YOUR_');
+
+  static Future<void> _ensureGoogleSignInInitialized() async {
+    if (_googleSignInInitialized) return;
+
+    if (AppConfig.googleWebClientId.contains('YOUR_')) {
+      throw const AuthException(
+        'Set AppConfig.googleWebClientId to your Google Cloud Web Client ID.',
+      );
+    }
+
+    await GoogleSignIn.instance.initialize(
+      serverClientId: AppConfig.googleWebClientId,
+      clientId: defaultTargetPlatform == TargetPlatform.iOS
+          ? (AppConfig.googleIosClientId.contains('YOUR_')
+              ? null
+              : AppConfig.googleIosClientId)
+          : null,
+    );
+
+    _googleSignInInitialized = true;
+  }
+
+  static Future<Map<String, dynamic>> _signInWithGoogleNative() async {
+    const scopes = ['email', 'profile'];
+
+    try {
+      await _ensureGoogleSignInInitialized();
+
+      final googleSignIn = GoogleSignIn.instance;
+      final googleUser = await googleSignIn.authenticate(
+        scopeHint: scopes,
+      );
+
+      final authorization =
+          await googleUser.authorizationClient.authorizationForScopes(scopes) ??
+              await googleUser.authorizationClient.authorizeScopes(scopes);
+
+      final idToken = googleUser.authentication.idToken;
+      if (idToken == null) {
+        return {
+          'success': false,
+          'message': 'Google did not return an ID token. Check your Web Client ID.',
+        };
+      }
+
+      await _supabase.auth.signInWithIdToken(
+        provider: OAuthProvider.google,
+        idToken: idToken,
+        accessToken: authorization.accessToken,
+      );
+
+      return {
+        'success': true,
+        'authenticated': true,
+        'message': 'Welcome!',
+      };
+    } on GoogleSignInException catch (e) {
+      debugPrint('Google sign-in error: $e');
+      if (e.code == GoogleSignInExceptionCode.canceled) {
+        return {
+          'success': false,
+          'message': 'Google sign-in was cancelled.',
+        };
+      }
+      return {
+        'success': false,
+        'message':
+            'Google sign-in failed (${e.code.name}). Verify your Google Cloud OAuth client IDs and SHA-1 fingerprint.',
+      };
+    } on AuthException catch (e) {
+      debugPrint('Supabase Google sign-in error: ${e.message}');
+      return {
+        'success': false,
+        'message': _friendlyOAuthMessage(e.message),
+      };
+    } catch (e) {
+      debugPrint('Native Google sign-in error: $e');
+      return {
+        'success': false,
+        'message': 'Google sign-in failed. Please try again.',
+      };
+    }
+  }
+
+  static Future<Map<String, dynamic>> _signInWithGoogleOAuth() async {
+    try {
+      final redirectUrl = getOAuthRedirectUrl();
+      debugPrint('Starting Supabase Google OAuth with redirectTo: $redirectUrl');
+
+      final launched = await _supabase.auth.signInWithOAuth(
+        OAuthProvider.google,
+        redirectTo: redirectUrl,
+        authScreenLaunchMode: kIsWeb
+            ? LaunchMode.platformDefault
+            : LaunchMode.externalApplication,
+      );
+
+      if (launched) {
+        return {
+          'success': true,
+          'authenticated': false,
+          'message': kIsWeb
+              ? 'Redirecting to Google sign-in...'
+              : 'Complete sign-in in your browser.',
+        };
+      }
+
+      return {
+        'success': false,
+        'message':
+            'Could not open the browser. Check that a browser is installed and try again.',
+      };
+    } on AuthException catch (e) {
+      debugPrint('Supabase Google sign-in error: ${e.message}');
+      return {
+        'success': false,
+        'message': _friendlyOAuthMessage(e.message),
+      };
+    } catch (e) {
+      debugPrint('Supabase Google sign-in error: $e');
+      return {
+        'success': false,
+        'message': 'Google sign-in failed. Please try again.',
+      };
+    }
+  }
+
+  static String _friendlyOAuthMessage(String message) {
+    if (message.contains('Provider') && message.contains('not enabled')) {
+      return 'Google sign-in is not enabled in Supabase. Enable it under Authentication → Providers.';
+    }
+    if (message.contains('redirect') || message.contains('Redirect')) {
+      final currentRedirect = getOAuthRedirectUrl();
+      return 'Redirect URL not allowed. Add $currentRedirect in Supabase → Authentication → URL Configuration.';
+    }
+    if (message.contains('Web Client ID')) {
+      return message;
+    }
+    return message;
+  }
+
   /// Logs out the user and clears all credentials
   static Future<void> signOut() async {
     try {
+      if (_googleSignInInitialized) {
+        await GoogleSignIn.instance.signOut();
+      }
       await _supabase.auth.signOut();
     } catch (_) {}
   }
